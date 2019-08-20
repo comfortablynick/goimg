@@ -1,4 +1,3 @@
-// Package main provides image manipulation functions
 package main
 
 import (
