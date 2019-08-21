@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/user"
 
 	"github.com/disintegration/imaging"
 )
@@ -45,7 +46,7 @@ func init() {
 	// set flags
 	flag.CommandLine.SetOutput(os.Stderr)
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr,
+		usage := fmt.Sprintf(
 			`Usage: %s [flags|options] [input_file] <output_file>
 Flags:
     -d      Print debug messages to console
@@ -59,8 +60,8 @@ Options:
     -mw	    Maximum width of output file <int>
     -max    Maximum pixel size of either dimension <int>
     -min    Minimum pixel size of either dimension <int>
-    -pct    Resize to pct of original dimensions <float>
-  `, binName, defaultQuality)
+    -pct    Resize to pct of original dimensions <float>`, binName, defaultQuality)
+		fmt.Fprintln(os.Stderr, usage)
 	}
 
 	// flag.StringVar(&opt.inputFilename, "i", "", "name of input file to resize/transcode")
@@ -78,22 +79,20 @@ Options:
 	flag.BoolVar(&opt.debug, "d", false, "print debug messages to console")
 	flag.BoolVar(&opt.noAction, "n", false, "don't write files; just display results")
 	flag.Parse()
+	opt.positionalArgs = flag.Args()
 	if debugMode || opt.debug {
 		log.SetOutput(os.Stderr)
+		user, err := user.Current()
+		if err != nil {
+			panic(err)
+		}
+		log.Printf("User home dir: %s", user.HomeDir)
+		opt.inputFilename = "/home/nick/Dropbox/Photography/Chin Class.jpg"
+		opt.outputFilename = "/home/nick/Dropbox/Photography/Chin_Class_edit.jpg"
+	} else {
+		opt.inputFilename = flag.Arg(1)
+		opt.outputFilename = flag.Arg(2)
 	}
-	opt.positionalArgs = flag.Args()
-	opt.inputFilename = func() string {
-		if debugMode {
-			return "/home/nick/Dropbox/Photography/Chin Class.jpg"
-		}
-		return flag.Arg(1)
-	}()
-	opt.outputFilename = func() string {
-		if debugMode {
-			return "/home/nick/Dropbox/Photography/Chin_Class_edit.jpg"
-		}
-		return flag.Arg(2)
-	}()
 	if opt.inputFilename == "" {
 		fmt.Fprintln(os.Stderr, "error: input file is required")
 		flag.Usage()
@@ -109,8 +108,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	src = imaging.Resize(src, 2400, 0, imaging.Lanczos)
-	err = imaging.Save(src, opt.outputFilename, imaging.JPEGQuality(75))
+	if opt.outputWidth > 0 && opt.outputHeight > 0 {
+		src = imaging.Resize(src, opt.outputWidth, opt.outputHeight, imaging.Lanczos)
+	}
+	if !opt.noAction {
+		err = imaging.Save(src, opt.outputFilename, imaging.JPEGQuality(75))
+	}
 	if err != nil {
 		panic(err)
 	}
