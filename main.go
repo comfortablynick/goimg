@@ -47,21 +47,19 @@ func init() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr,
 			`Usage: %s [flags|options] [input_file] <output_file>
-
 Flags:
-    -d 	Print debug messages to console
-    -f 	Force overwrite output file, even if it exists
-    -n 	Don't write files; just display results
-
+    -d      Print debug messages to console
+    -f 	    Force overwrite output file, even if it exists
+    -n 	    Don't write files; just display results
 Options:
-    -q 	<int> 	Quality of jpeg file (1-100; default %d)
-    -h 	<int>	Height in pixels of output file
-    -w 	<int> 	Width in pixels of output file
-    -mh	<int> 	Maximum height of output file
-    -mw	<int> 	Maximum width of output file
-    -max<int> 	Maximum pixel size of either dimension
-    -min<int> 	Minimum pixel size of either dimension
-    -pct<float>	Resize to pct of original dimensions
+    -q      Quality of jpeg file (1-100; default %d) <int>
+    -h 	    Height in pixels of output file <int>
+    -w 	    Width in pixels of output file <int>
+    -mh	    Maximum height of output file <int>
+    -mw	    Maximum width of output file <int>
+    -max    Maximum pixel size of either dimension <int>
+    -min    Minimum pixel size of either dimension <int>
+    -pct    Resize to pct of original dimensions <float>
   `, binName, defaultQuality)
 	}
 
@@ -80,17 +78,26 @@ Options:
 	flag.BoolVar(&opt.debug, "d", false, "print debug messages to console")
 	flag.BoolVar(&opt.noAction, "n", false, "don't write files; just display results")
 	flag.Parse()
-	if flag.NArg() < 1 {
+	if debugMode || opt.debug {
+		log.SetOutput(os.Stderr)
+	}
+	opt.positionalArgs = flag.Args()
+	opt.inputFilename = func() string {
+		if debugMode {
+			return "/home/nick/Dropbox/Photography/Chin Class.jpg"
+		}
+		return flag.Arg(1)
+	}()
+	opt.outputFilename = func() string {
+		if debugMode {
+			return "/home/nick/Dropbox/Photography/Chin_Class_edit.jpg"
+		}
+		return flag.Arg(2)
+	}()
+	if opt.inputFilename == "" {
 		fmt.Fprintln(os.Stderr, "error: input file is required")
 		flag.Usage()
 		os.Exit(1)
-	}
-	opt.positionalArgs = flag.Args()
-	opt.inputFilename = flag.Arg(1)
-	opt.outputFilename = flag.Arg(2)
-
-	if debugMode || opt.debug {
-		log.SetOutput(os.Stderr)
 	}
 }
 
@@ -98,12 +105,12 @@ func main() {
 	log.Printf("Command line options: %+v", opt)
 
 	// Open image
-	src, err := imaging.Open("/home/nick/Dropbox/Photography/Chin Class.jpg", imaging.AutoOrientation(true))
+	src, err := imaging.Open(opt.inputFilename, imaging.AutoOrientation(true))
 	if err != nil {
 		panic(err)
 	}
 	src = imaging.Resize(src, 2400, 0, imaging.Lanczos)
-	err = imaging.Save(src, "/home/nick/Dropbox/Photography/Chin_Class_edit.jpg", imaging.JPEGQuality(75))
+	err = imaging.Save(src, opt.outputFilename, imaging.JPEGQuality(75))
 	if err != nil {
 		panic(err)
 	}
