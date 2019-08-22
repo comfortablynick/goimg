@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/user"
 
-	"github.com/disintegration/imaging"
+	"gopkg.in/h2non/bimg.v1"
 )
 
 type Options struct {
@@ -102,17 +102,35 @@ Options:
 
 func main() {
 	log.Printf("Command line options: %+v", opt)
-
+	options := bimg.Options{
+		Width:     opt.outputWidth,
+		Height:    opt.outputHeight,
+		Crop:      true,
+		Quality:   opt.jpegQuality,
+		Rotate:    0,
+		Interlace: true,
+	}
 	// Open image
-	src, err := imaging.Open(opt.inputFilename, imaging.AutoOrientation(true))
+	src, err := bimg.Read(opt.inputFilename)
+	// src, err := imaging.Open(opt.inputFilename, imaging.AutoOrientation(true))
 	if err != nil {
 		panic(err)
 	}
+	meta, err := bimg.Metadata(src)
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Image metadata: %+v", meta)
 	if opt.outputWidth > 0 && opt.outputHeight > 0 {
-		src = imaging.Resize(src, opt.outputWidth, opt.outputHeight, imaging.Lanczos)
+		src, err = bimg.Resize(src, options)
+		if err != nil {
+			panic(err)
+		}
+		// src = imaging.Resize(src, opt.outputWidth, opt.outputHeight, imaging.Lanczos)
 	}
 	if !opt.noAction {
-		err = imaging.Save(src, opt.outputFilename, imaging.JPEGQuality(75))
+		/* err = imaging.Save(src, opt.outputFilename, imaging.JPEGQuality(75)) */
+		bimg.Write(opt.outputFilename, src)
 	}
 	if err != nil {
 		panic(err)
