@@ -35,6 +35,7 @@ const debugMode bool = true
 const defaultQuality int = 85
 
 var opt Options
+var imgOpt bimg.Options
 
 func init() {
 	// init log
@@ -94,45 +95,62 @@ Options:
 		opt.outputFilename = flag.Arg(2)
 	}
 	if opt.inputFilename == "" {
-		fmt.Fprintln(os.Stderr, "error: input file is required")
+		fmt.Fprintln(os.Stderr, "No input filename provided, quitting.")
 		flag.Usage()
 		os.Exit(1)
 	}
 }
 
+func deltaReport(orig *[]byte, edited *[]byte) string {
+	origMeta, _ := bimg.Metadata(*orig)
+	editedMeta, _ := bimg.Metadata(*edited)
+
+	return fmt.Sprintf("Original: %+v\nNew: %+v", origMeta.Size, editedMeta.Size)
+}
+
 func main() {
+	opt.noAction = true
 	log.Printf("Command line options: %+v", opt)
-	options := bimg.Options{
-		Width:     opt.outputWidth,
-		Height:    opt.outputHeight,
-		Crop:      true,
-		Quality:   opt.jpegQuality,
-		Rotate:    0,
-		Interlace: true,
-	}
 	// Open image
-	src, err := bimg.Read(opt.inputFilename)
-	// src, err := imaging.Open(opt.inputFilename, imaging.AutoOrientation(true))
+	srcFile, err := bimg.Read(opt.inputFilename)
 	if err != nil {
 		panic(err)
 	}
-	meta, err := bimg.Metadata(src)
+	src := bimg.NewImage(srcFile)
+	srcMeta, err := src.Metadata()
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Image metadata: %+v", meta)
-	if opt.outputWidth > 0 && opt.outputHeight > 0 {
-		src, err = bimg.Resize(src, options)
-		if err != nil {
-			panic(err)
+	log.Printf("Original metadata: %+v", srcMeta)
+	imgOpt.Interlace = true
+	imgOpt.Width = func() int {
+		if opt.outputWidth == 0 {
+			if opt.outputHeight > 0 {
+				return 0
+			}
+			return srcMeta.Size.Width
 		}
-		// src = imaging.Resize(src, opt.outputWidth, opt.outputHeight, imaging.Lanczos)
-	}
-	if !opt.noAction {
-		/* err = imaging.Save(src, opt.outputFilename, imaging.JPEGQuality(75)) */
-		bimg.Write(opt.outputFilename, src)
-	}
+		return opt.outputWidth
+	}()
+	imgOpt.Height = func() int {
+		if opt.outputHeight == 0 {
+			if opt.outputWidth > 0 {
+				return 0
+			}
+			return srcMeta.Size.Height
+		}
+		return opt.outputHeight
+	}()
+	imgOpt.Quality = opt.jpegQuality
+
+	// Process image
+	out, err := src.Process(imgOpt)
 	if err != nil {
 		panic(err)
+	}
+	fmt.Println(deltaReport(&srcFile, &out))
+	if !opt.noAction {
+		bimg.Write(opt.outputFilename, out)
+		return
 	}
 }
