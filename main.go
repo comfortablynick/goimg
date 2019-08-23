@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -36,6 +37,52 @@ const defaultQuality int = 85
 
 var opt Options
 var imgOpt bimg.Options
+
+// Max calculates the maximum of two integers
+func Max(nums ...int) int {
+	max := nums[0]
+	for _, i := range nums[1:] {
+		if i > max {
+			max = i
+		}
+	}
+	return max
+}
+
+// Min calculates the minimum of two integers
+func Min(nums ...int) int {
+	min := nums[0]
+	for _, i := range nums[1:] {
+		if i < min {
+			min = i
+		}
+	}
+	return min
+}
+
+// Scale calculates the new pixel size based on pct scaling factor
+func Scale(pct float64, size int) int {
+	return int(float64(size) * (float64(pct) / float64(100)))
+}
+
+// Humanize prints bytes in human-readable strings
+func Humanize(bytes int) string {
+	suffix := "B"
+	num := float64(bytes)
+	factor := 1024.0
+	// k=kilo, M=mega, G=giga, T=tera, P=peta, E=exa, Z=zetta, Y=yotta
+	units := []string{"", "K", "M", "G", "T", "P", "E", "Z"}
+
+	for _, unit := range units {
+		if num < factor {
+			return fmt.Sprintf("%3.1f%s%s", num, unit, suffix)
+		}
+		num = (num / factor)
+	}
+	// if we got here, it's a really big number!
+	// return yottabytes
+	return fmt.Sprintf("%.1f%s%s", num, "Y", suffix)
+}
 
 func init() {
 	// init log
@@ -101,11 +148,13 @@ Options:
 	}
 }
 
-func deltaReport(orig *[]byte, edited *[]byte) string {
+func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) (int, error) {
 	origMeta, _ := bimg.Metadata(*orig)
 	editedMeta, _ := bimg.Metadata(*edited)
+	log.Printf("Original metadata: %+v", origMeta)
+	log.Printf("Edited metadata: %+v", editedMeta)
 
-	return fmt.Sprintf("Original: %+v\nNew: %+v", origMeta.Size, editedMeta.Size)
+	return w.Write([]byte(fmt.Sprintf("Original: %+v\nEdited: %+v", origMeta.Size, editedMeta.Size)))
 }
 
 func main() {
@@ -121,7 +170,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Original metadata: %+v", srcMeta)
+	if opt.noAction {
+		fmt.Println("***Displaying results only***")
+	}
 	imgOpt.Interlace = true
 	imgOpt.Width = func() int {
 		if opt.outputWidth == 0 {
@@ -148,7 +199,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(deltaReport(&srcFile, &out))
+	WriteDelta(os.Stdout, &srcFile, &out)
 	if !opt.noAction {
 		bimg.Write(opt.outputFilename, out)
 		return
