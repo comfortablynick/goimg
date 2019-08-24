@@ -149,8 +149,15 @@ Options:
 }
 
 func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) (int, error) {
-	origMeta, _ := bimg.Metadata(*orig)
-	editedMeta, _ := bimg.Metadata(*edited)
+	var origMeta bimg.ImageMetadata
+	var editedMeta bimg.ImageMetadata
+	var err error
+	if origMeta, err = bimg.Metadata(*orig); err != nil {
+		return 1, err
+	}
+	if editedMeta, err = bimg.Metadata(*edited); err != nil {
+		return 1, err
+	}
 	log.Printf("Original metadata: %+v", origMeta)
 	log.Printf("Edited metadata: %+v", editedMeta)
 
