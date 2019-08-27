@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/user"
+	"text/tabwriter"
 
 	"gopkg.in/h2non/bimg.v1"
 )
@@ -148,20 +149,35 @@ Options:
 	}
 }
 
-func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) (int, error) {
+func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
 	var origMeta bimg.ImageMetadata
 	var editedMeta bimg.ImageMetadata
 	var err error
 	if origMeta, err = bimg.Metadata(*orig); err != nil {
-		return 1, err
+		return err
 	}
 	if editedMeta, err = bimg.Metadata(*edited); err != nil {
-		return 1, err
+		return err
 	}
+	inputSize := len(*orig)
+	outputSize := len(*edited)
 	log.Printf("Original metadata: %+v", origMeta)
 	log.Printf("Edited metadata: %+v", editedMeta)
+	// Print tabulated report
+	fmt.Fprintf(w, "Input File\t%s\n", opt.inputFilename)
+	fmt.Fprintf(w, "Output File\t%s\n", opt.outputFilename)
+	if origMeta.Size != editedMeta.Size {
+		fmt.Fprintf(w, "File Dimensions\t%d x %d px\t -> \t%d x %d px\n",
+			origMeta.Size.Width, origMeta.Size.Height, editedMeta.Size.Width, editedMeta.Size.Height)
+	} else {
+		// No change in dimensions; just print one set
+		fmt.Fprintf(w, "File Dimensions\t%d x %d px\n",
+			editedMeta.Size.Width, editedMeta.Size.Height)
+	}
+	fmt.Fprintf(w, "File Size\t%s\t -> \t%s\n", Humanize(inputSize), Humanize(outputSize))
+	fmt.Fprintf(w, "Size Reduction\t%.1f%%", 100.0-(float64(outputSize)/float64(inputSize)*100))
 
-	return w.Write([]byte(fmt.Sprintf("Original: %+v\nEdited: %+v", origMeta.Size, editedMeta.Size)))
+	return nil
 }
 
 func main() {
@@ -206,7 +222,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	WriteDelta(os.Stdout, &srcFile, &out)
+	// print details table
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
+	WriteDelta(w, &srcFile, &out)
+	fmt.Fprintln(w)
+	w.Flush() // write details table
 	if !opt.noAction {
 		bimg.Write(opt.outputFilename, out)
 		return
