@@ -4,16 +4,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"os"
 	"os/user"
 	"text/tabwriter"
 
+	"go.uber.org/zap"
 	"gopkg.in/h2non/bimg.v1"
 )
 
-type Options struct {
+var log *zap.SugaredLogger
+
+type options struct {
 	version        bool
 	debug          bool
 	inputFilename  string
@@ -36,7 +37,7 @@ const binName string = "goimg"
 const debugMode bool = true
 const defaultQuality int = 85
 
-var opt Options
+var opt options
 var imgOpt bimg.Options
 
 // Max calculates the maximum of two integers
@@ -87,31 +88,30 @@ func Humanize(bytes int) string {
 
 func init() {
 	// init log
-	// TODO: add time, etc.
-	log.SetPrefix("DEBUG ")
-	log.SetFlags(log.Lshortfile)
-	log.SetOutput(ioutil.Discard)
+	logger, _ := zap.NewDevelopment()
+	log = logger.Sugar()
+	defer log.Sync()
 
 	// set flags
 	flag.CommandLine.SetOutput(os.Stderr)
-	flag.Usage = func() {
-		usage := fmt.Sprintf(
-			`Usage: %s [flags|options] [input_file] <output_file>
-Flags:
-    -d      Print debug messages to console
-    -f 	    Force overwrite output file, even if it exists
-    -n 	    Don't write files; just display results
-Options:
-    -q      Quality of jpeg file (1-100; default %d) <int>
-    -h 	    Height in pixels of output file <int>
-    -w 	    Width in pixels of output file <int>
-    -mh	    Maximum height of output file <int>
-    -mw	    Maximum width of output file <int>
-    -max    Maximum pixel size of either dimension <int>
-    -min    Minimum pixel size of either dimension <int>
-    -pct    Resize to pct of original dimensions <float>`, binName, defaultQuality)
-		fmt.Fprintln(os.Stderr, usage)
-	}
+	//     flag.Usage = func() {
+	//         usage := fmt.Sprintf(
+	//             `Usage: %s [flags|options] [input_file] <output_file>
+	// Flags:
+	//     -d      Print debug messages to console
+	//     -f 	    Force overwrite output file, even if it exists
+	//     -n 	    Don't write files; just display results
+	// Options:
+	//     -q      Quality of jpeg file (1-100; default %d) <int>
+	//     -h 	    Height in pixels of output file <int>
+	//     -w 	    Width in pixels of output file <int>
+	//     -mh	    Maximum height of output file <int>
+	//     -mw	    Maximum width of output file <int>
+	//     -max    Maximum pixel size of either dimension <int>
+	//     -min    Minimum pixel size of either dimension <int>
+	//     -pct    Resize to pct of original dimensions <float>`, binName, defaultQuality)
+	//         fmt.Fprintln(os.Stderr, usage)
+	//     }
 
 	// flag.StringVar(&opt.inputFilename, "i", "", "name of input file to resize/transcode")
 	// flag.StringVar(&opt.outputFilename, "o", "", "name of output file, also determines output type")
@@ -121,21 +121,21 @@ Options:
 	flag.IntVar(&opt.outputHeight, "h", 0, "height of output file")
 	flag.IntVar(&opt.maxWidth, "mw", 0, "maximum width of output file")
 	flag.IntVar(&opt.maxHeight, "mh", 0, "maximum height of output file")
-	flag.IntVar(&opt.maxLongest, "max", 0, "maximum length of either dimension")
-	flag.IntVar(&opt.minShortest, "min", 0, "Minimum length of shortest side")
-	flag.Float64Var(&opt.pctResize, "pct", 0, "resize to pct of original dimensions")
+	flag.IntVar(&opt.maxLongest, "l", 0, "maximum length of longest dimension")
+	flag.IntVar(&opt.minShortest, "s", 0, "Minimum length of shortest dimension")
+	flag.Float64Var(&opt.pctResize, "p", 0, "resize to pct of original dimensions")
 	flag.BoolVar(&opt.force, "f", false, "overwrite output file if it exists")
 	flag.BoolVar(&opt.debug, "d", false, "print debug messages to console")
 	flag.BoolVar(&opt.noAction, "n", false, "don't write files; just display results")
 	flag.Parse()
 	opt.positionalArgs = flag.Args()
 	if debugMode || opt.debug {
-		log.SetOutput(os.Stderr)
+		// log.SetOutput(os.Stderr)
 		user, err := user.Current()
 		if err != nil {
 			panic(err)
 		}
-		log.Printf("User home dir: %s", user.HomeDir)
+		log.Infof("User home dir: %s", user.HomeDir)
 		opt.inputFilename = "/home/nick/Dropbox/Photography/Chin Class.jpg"
 		opt.outputFilename = "/home/nick/Dropbox/Photography/Chin_Class_edit.jpg"
 	} else {
@@ -149,6 +149,7 @@ Options:
 	}
 }
 
+// WriteDelta prints a formatted message of what has changed after editing
 func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
 	var origMeta bimg.ImageMetadata
 	var editedMeta bimg.ImageMetadata
@@ -161,8 +162,8 @@ func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
 	}
 	inputSize := len(*orig)
 	outputSize := len(*edited)
-	log.Printf("Original metadata: %+v", origMeta)
-	log.Printf("Edited metadata: %+v", editedMeta)
+	log.Infof("Original metadata: %+v", origMeta)
+	log.Infof("Edited metadata: %+v", editedMeta)
 	// Print tabulated report
 	fmt.Fprintf(w, "Input File\t%s\n", opt.inputFilename)
 	fmt.Fprintf(w, "Output File\t%s\n", opt.outputFilename)
@@ -182,7 +183,7 @@ func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
 
 func main() {
 	opt.noAction = true
-	log.Printf("Command line options: %+v", opt)
+	log.Infof("Command line options: %+v", opt)
 	// Open image
 	srcFile, err := bimg.Read(opt.inputFilename)
 	if err != nil {
@@ -196,8 +197,10 @@ func main() {
 	if opt.noAction {
 		fmt.Println("***Displaying results only***")
 	}
-	imgOpt.Interlace = true
-	imgOpt.Width = func() int {
+	opt.outputWidth = func() int {
+		if opt.pctResize > 0 {
+			return Scale(opt.pctResize, srcMeta.Size.Width)
+		}
 		if opt.outputWidth == 0 {
 			if opt.outputHeight > 0 {
 				return 0
@@ -206,7 +209,11 @@ func main() {
 		}
 		return opt.outputWidth
 	}()
-	imgOpt.Height = func() int {
+	opt.outputHeight = func() int {
+		if opt.pctResize > 0 {
+			log.Infof("Resizing height to %f percent", opt.pctResize)
+			return Scale(opt.pctResize, srcMeta.Size.Height)
+		}
 		if opt.outputHeight == 0 {
 			if opt.outputWidth > 0 {
 				return 0
@@ -215,13 +222,19 @@ func main() {
 		}
 		return opt.outputHeight
 	}()
+
+	// Set image processing options
+	imgOpt.Interlace = true
 	imgOpt.Quality = opt.jpegQuality
+	imgOpt.Width = opt.outputWidth
+	imgOpt.Height = opt.outputHeight
 
 	// Process image
 	out, err := src.Process(imgOpt)
 	if err != nil {
 		panic(err)
 	}
+	log.Debugf("Image processed with options: %+v\n", imgOpt)
 	// print details table
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
 	WriteDelta(w, &srcFile, &out)
