@@ -6,13 +6,13 @@ import (
 	"io"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/h2non/bimg.v1"
 )
-
-var log *zap.SugaredLogger
 
 type options struct {
 	version        bool
@@ -38,6 +38,8 @@ const defaultQuality int = 85
 
 var opt options
 var imgOpt bimg.Options
+var termWidth, termHeight int
+var log *zap.SugaredLogger
 
 // Max calculates the maximum of two integers
 func Max(nums ...int) int {
@@ -86,17 +88,39 @@ func Humanize(bytes int) string {
 }
 
 func init() {
+	var err error
+	if termWidth, termHeight, err = terminal.GetSize(1); err != nil {
+		panic(err)
+	}
+	logTimeEnc := func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+		if termWidth > 200 {
+			enc.AppendString(t.Format("Jan 02 15:04:05.000"))
+		}
+	}
 	// init log
-	// config := zap.NewDevelopmentConfig()
-	// config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	// logger, _ := config.Build()
 	atom := zap.NewAtomicLevel()
-	config := zap.NewDevelopmentEncoderConfig()
-	config.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	logger := zap.New(zapcore.NewCore(zapcore.NewConsoleEncoder(config), zapcore.AddSync(os.Stderr), atom))
+	config := zap.Config{
+		Encoding:         "console",
+		Level:            atom,
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+		EncoderConfig: zapcore.EncoderConfig{
+			MessageKey: "message",
+
+			LevelKey:    "level",
+			EncodeLevel: zapcore.CapitalLevelEncoder,
+
+			TimeKey:    "time",
+			EncodeTime: logTimeEnc,
+
+			CallerKey:    "caller",
+			EncodeCaller: zapcore.ShortCallerEncoder,
+		},
+	}
+	logger, _ := config.Build()
 	log = logger.Sugar()
 	defer log.Sync()
-
+	log.Infof("Term width: %d  Term height: %d", termWidth, termHeight)
 	// set flags
 	flag.CommandLine.SetOutput(os.Stderr)
 	// Literal usage message {{{
