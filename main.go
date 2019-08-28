@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/user"
 	"text/tabwriter"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/h2non/bimg.v1"
 )
 
@@ -16,7 +16,7 @@ var log *zap.SugaredLogger
 
 type options struct {
 	version        bool
-	debug          bool
+	verbosity      int
 	inputFilename  string
 	outputFilename string
 	jpegQuality    int
@@ -34,7 +34,6 @@ type options struct {
 }
 
 const binName string = "goimg"
-const debugMode bool = true
 const defaultQuality int = 85
 
 var opt options
@@ -88,12 +87,19 @@ func Humanize(bytes int) string {
 
 func init() {
 	// init log
-	logger, _ := zap.NewDevelopment()
+	// config := zap.NewDevelopmentConfig()
+	// config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	// logger, _ := config.Build()
+	atom := zap.NewAtomicLevel()
+	config := zap.NewDevelopmentEncoderConfig()
+	config.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	logger := zap.New(zapcore.NewCore(zapcore.NewConsoleEncoder(config), zapcore.AddSync(os.Stderr), atom))
 	log = logger.Sugar()
 	defer log.Sync()
 
 	// set flags
 	flag.CommandLine.SetOutput(os.Stderr)
+	// Literal usage message {{{
 	//     flag.Usage = func() {
 	//         usage := fmt.Sprintf(
 	//             `Usage: %s [flags|options] [input_file] <output_file>
@@ -112,10 +118,8 @@ func init() {
 	//     -pct    Resize to pct of original dimensions <float>`, binName, defaultQuality)
 	//         fmt.Fprintln(os.Stderr, usage)
 	//     }
+	// }}}
 
-	// flag.StringVar(&opt.inputFilename, "i", "", "name of input file to resize/transcode")
-	// flag.StringVar(&opt.outputFilename, "o", "", "name of output file, also determines output type")
-	// flag.BoolVar(&opt.stretch, "stretch", false, "perform stretching resize instead of cropping")
 	flag.IntVar(&opt.jpegQuality, "q", defaultQuality, "jpeg quality (1-100)")
 	flag.IntVar(&opt.outputWidth, "w", 0, "width of output file")
 	flag.IntVar(&opt.outputHeight, "h", 0, "height of output file")
@@ -125,19 +129,24 @@ func init() {
 	flag.IntVar(&opt.minShortest, "s", 0, "Minimum length of shortest dimension")
 	flag.Float64Var(&opt.pctResize, "p", 0, "resize to pct of original dimensions")
 	flag.BoolVar(&opt.force, "f", false, "overwrite output file if it exists")
-	flag.BoolVar(&opt.debug, "d", false, "print debug messages to console")
+	// flag.BoolVar(&opt.debug, "d", false, "print debug messages to console")
+	flag.IntVar(&opt.verbosity, "v", 1, "increase debug messages to console")
 	flag.BoolVar(&opt.noAction, "n", false, "don't write files; just display results")
 	flag.Parse()
 	opt.positionalArgs = flag.Args()
-	if debugMode || opt.debug {
-		// log.SetOutput(os.Stderr)
-		user, err := user.Current()
-		if err != nil {
-			panic(err)
-		}
-		log.Infof("User home dir: %s", user.HomeDir)
-		opt.inputFilename = "/home/nick/Dropbox/Photography/Chin Class.jpg"
-		opt.outputFilename = "/home/nick/Dropbox/Photography/Chin_Class_edit.jpg"
+
+	// Set logging level
+	switch opt.verbosity {
+	case 1:
+		atom.SetLevel(zap.InfoLevel)
+	case 2:
+		atom.SetLevel(zap.DebugLevel)
+	default:
+		atom.SetLevel(zap.ErrorLevel)
+	}
+	if opt.verbosity > 0 {
+		opt.inputFilename = "./test/example01.jpg"
+		opt.outputFilename = "./test/example01_edit.jpg"
 	} else {
 		opt.inputFilename = flag.Arg(1)
 		opt.outputFilename = flag.Arg(2)

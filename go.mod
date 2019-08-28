@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/disintegration/imaging v1.6.0
+	github.com/mattn/go-colorable v0.1.2
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/stretchr/testify v1.4.0 // indirect
 	go.uber.org/atomic v1.4.0 // indirect
