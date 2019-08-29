@@ -19,14 +19,14 @@ build:
 install:
     #!/usr/bin/env bash
     if [[ {{dev}} -eq "1" ]]; then
-        go build && go run .
+        go build && go run . -test -n -v 2
     else
         go install .
     fi #
 
 # build release binary and run
 run:
-    go run .
+    go run . -test -n -v 2
 
 help:
     ./{{bin_name}} -h

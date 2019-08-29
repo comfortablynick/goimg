@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"text/tabwriter"
 	"time"
 
@@ -19,6 +20,7 @@ type options struct {
 	verbosity      int
 	inputFilename  string
 	outputFilename string
+	outputSuffix   string
 	jpegQuality    int
 	outputWidth    int
 	outputHeight   int
@@ -30,6 +32,7 @@ type options struct {
 	stretch        bool
 	force          bool
 	noAction       bool
+	test           bool
 	positionalArgs []string
 }
 
@@ -120,7 +123,6 @@ func init() {
 	logger, _ := config.Build()
 	log = logger.Sugar()
 	defer log.Sync()
-	log.Infof("Term width: %d  Term height: %d", termWidth, termHeight)
 	// set flags
 	flag.CommandLine.SetOutput(os.Stderr)
 	// Literal usage message {{{
@@ -144,6 +146,9 @@ func init() {
 	//     }
 	// }}}
 
+	flag.StringVar(&opt.inputFilename, "i", "", "path of input file")
+	flag.StringVar(&opt.outputFilename, "o", "", "path of output file")
+	flag.StringVar(&opt.outputSuffix, "suffix", "_edit", "suffix to add to input filename for output filename")
 	flag.IntVar(&opt.jpegQuality, "q", defaultQuality, "jpeg quality (1-100)")
 	flag.IntVar(&opt.outputWidth, "w", 0, "width of output file")
 	flag.IntVar(&opt.outputHeight, "h", 0, "height of output file")
@@ -153,11 +158,10 @@ func init() {
 	flag.IntVar(&opt.minShortest, "s", 0, "Minimum length of shortest dimension")
 	flag.Float64Var(&opt.pctResize, "p", 0, "resize to pct of original dimensions")
 	flag.BoolVar(&opt.force, "f", false, "overwrite output file if it exists")
-	// flag.BoolVar(&opt.debug, "d", false, "print debug messages to console")
 	flag.IntVar(&opt.verbosity, "v", 1, "increase debug messages to console")
 	flag.BoolVar(&opt.noAction, "n", false, "don't write files; just display results")
+	flag.BoolVar(&opt.test, "test", false, "use test files")
 	flag.Parse()
-	opt.positionalArgs = flag.Args()
 
 	// Set logging level
 	switch opt.verbosity {
@@ -168,17 +172,20 @@ func init() {
 	default:
 		atom.SetLevel(zap.ErrorLevel)
 	}
-	if opt.verbosity > 0 {
+	if opt.test {
 		opt.inputFilename = "./test/example01.jpg"
 		opt.outputFilename = "./test/example01_edit.jpg"
-	} else {
-		opt.inputFilename = flag.Arg(1)
-		opt.outputFilename = flag.Arg(2)
 	}
 	if opt.inputFilename == "" {
 		fmt.Fprintln(os.Stderr, "No input filename provided, quitting.")
 		flag.Usage()
 		os.Exit(1)
+	}
+	if opt.outputFilename == "" {
+		log.Info("No output filename provided; applying suffix to input filename")
+		ext := filepath.Ext(opt.inputFilename)
+		pathNoExt := opt.inputFilename[0 : len(opt.inputFilename)-len(ext)]
+		opt.outputFilename = pathNoExt + opt.outputSuffix + ext
 	}
 }
 
@@ -215,7 +222,6 @@ func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
 }
 
 func main() {
-	opt.noAction = true
 	log.Infof("Command line options: %+v", opt)
 	// Open image
 	srcFile, err := bimg.Read(opt.inputFilename)
