@@ -38,6 +38,7 @@ const binName string = "goimg"
 const defaultQuality int = 85
 
 var opt options
+var forceOverwrite bool
 var imgOpt bimg.Options
 var termWidth, termHeight int
 var log *zap.SugaredLogger
@@ -86,6 +87,21 @@ func Humanize(bytes int) string {
 	// if we got here, it's a really big number!
 	// return yottabytes
 	return fmt.Sprintf("%.1f%s%s", num, "Y", suffix)
+}
+
+// CheckOutputFile checks if file is valid and writeable
+func CheckOutputFile(filename string, force bool) error {
+	if _, err := os.Stat(filename); !os.IsNotExist(err) {
+		if !force {
+			return fmt.Errorf("error: output filename '%s' exists. To overwrite, use -f to force", filename)
+		}
+		if err := os.Remove(filename); err != nil {
+			return fmt.Errorf("error: unable to remove existing file '%s'; aborting", filename)
+		}
+		forceOverwrite = true
+		log.Info("Output file exists; replacing due to -f.")
+	}
+	return nil
 }
 
 func init() {
@@ -186,7 +202,7 @@ func init() {
 }
 
 // WriteDelta prints a formatted message of what has changed after editing
-func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
+func WriteDelta(w io.Writer, orig, edited *[]byte) error {
 	var origMeta bimg.ImageMetadata
 	var editedMeta bimg.ImageMetadata
 	var err error
@@ -206,7 +222,12 @@ func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
 		fmt.Fprintln(w, "***Displaying results only***")
 	}
 	if opt.inputFilename != opt.outputFilename {
-		fmt.Fprintf(w, "File Name:\t%s\t->\t%s\n", opt.inputFilename, opt.outputFilename)
+		fmt.Fprintf(w, "File Name:\t%s\t->\t%s%s\n", opt.inputFilename, opt.outputFilename, func() string {
+			if forceOverwrite {
+				return " (replaced)"
+			}
+			return ""
+		}())
 	} else {
 		fmt.Fprintf(w, "File Name\t%s\n", opt.inputFilename)
 	}
@@ -276,13 +297,18 @@ func main() {
 		panic(err)
 	}
 	log.Debugf("Image processed with options: %+v\n", imgOpt)
+
+	if !opt.noAction {
+		if err := CheckOutputFile(opt.outputFilename, opt.force); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		bimg.Write(opt.outputFilename, out)
+	}
+
 	// print details table
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
 	WriteDelta(w, &srcFile, &out)
 	fmt.Fprintln(w)
-	w.Flush() // write details table
-	if !opt.noAction {
-		bimg.Write(opt.outputFilename, out)
-		return
-	}
+	w.Flush()
 }
