@@ -24,8 +24,6 @@ type options struct {
 	jpegQuality    int
 	outputWidth    int
 	outputHeight   int
-	maxWidth       int
-	maxHeight      int
 	maxLongest     int
 	minShortest    int
 	pctResize      float64
@@ -152,13 +150,11 @@ func init() {
 	flag.IntVar(&opt.jpegQuality, "q", defaultQuality, "jpeg quality (1-100)")
 	flag.IntVar(&opt.outputWidth, "w", 0, "width of output file")
 	flag.IntVar(&opt.outputHeight, "h", 0, "height of output file")
-	flag.IntVar(&opt.maxWidth, "mw", 0, "maximum width of output file")
-	flag.IntVar(&opt.maxHeight, "mh", 0, "maximum height of output file")
 	flag.IntVar(&opt.maxLongest, "l", 0, "maximum length of longest dimension")
 	flag.IntVar(&opt.minShortest, "s", 0, "Minimum length of shortest dimension")
 	flag.Float64Var(&opt.pctResize, "p", 0, "resize to pct of original dimensions")
 	flag.BoolVar(&opt.force, "f", false, "overwrite output file if it exists")
-	flag.IntVar(&opt.verbosity, "v", 1, "increase debug messages to console")
+	flag.IntVar(&opt.verbosity, "v", 0, "increase debug messages to console")
 	flag.BoolVar(&opt.noAction, "n", false, "don't write files; just display results")
 	flag.BoolVar(&opt.test, "test", false, "use test files")
 	flag.Parse()
@@ -204,18 +200,25 @@ func WriteDelta(w io.Writer, orig *[]byte, edited *[]byte) error {
 	outputSize := len(*edited)
 	log.Infof("Original metadata: %+v", origMeta)
 	log.Infof("Edited metadata: %+v", editedMeta)
+
 	// Print tabulated report
-	fmt.Fprintf(w, "Input File\t%s\n", opt.inputFilename)
-	fmt.Fprintf(w, "Output File\t%s\n", opt.outputFilename)
+	if opt.noAction {
+		fmt.Fprintln(w, "***Displaying results only***")
+	}
+	if opt.inputFilename != opt.outputFilename {
+		fmt.Fprintf(w, "File Name:\t%s\t->\t%s\n", opt.inputFilename, opt.outputFilename)
+	} else {
+		fmt.Fprintf(w, "File Name\t%s\n", opt.inputFilename)
+	}
 	if origMeta.Size != editedMeta.Size {
-		fmt.Fprintf(w, "File Dimensions\t%d x %d px\t -> \t%d x %d px\n",
+		fmt.Fprintf(w, "File Dimensions\t%d x %d px\t->\t%d x %d px\n",
 			origMeta.Size.Width, origMeta.Size.Height, editedMeta.Size.Width, editedMeta.Size.Height)
 	} else {
 		// No change in dimensions; just print one set
 		fmt.Fprintf(w, "File Dimensions\t%d x %d px\n",
 			editedMeta.Size.Width, editedMeta.Size.Height)
 	}
-	fmt.Fprintf(w, "File Size\t%s\t -> \t%s\n", Humanize(inputSize), Humanize(outputSize))
+	fmt.Fprintf(w, "File Size\t%s\t->\t%s\n", Humanize(inputSize), Humanize(outputSize))
 	fmt.Fprintf(w, "Size Reduction\t%.1f%%", 100.0-(float64(outputSize)/float64(inputSize)*100))
 
 	return nil
@@ -233,31 +236,30 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if opt.noAction {
-		fmt.Println("***Displaying results only***")
+	if opt.maxLongest > 0 {
+		// calculate longest dim, and assign to pctResize
+		if longest := Max(srcMeta.Size.Width, srcMeta.Size.Height); longest > opt.maxLongest {
+			log.Infof("Resizing to longest dimension of %d px\n", opt.maxLongest)
+			opt.pctResize = (float64(opt.maxLongest) / float64(longest)) * float64(100)
+		}
+	}
+	if opt.minShortest > 0 {
+		// calculate shortest dim, and assign to pctResize
+		if shortest := Min(srcMeta.Size.Width, srcMeta.Size.Height); shortest > opt.minShortest {
+			log.Infof("Resizing shortest dimension to %d px\n", opt.minShortest)
+			opt.pctResize = (float64(opt.minShortest) / float64(shortest)) * float64(100)
+		}
 	}
 	opt.outputWidth = func() int {
 		if opt.pctResize > 0 {
+			log.Infof("Resizing to %.1f%% of original size", opt.pctResize)
 			return Scale(opt.pctResize, srcMeta.Size.Width)
-		}
-		if opt.outputWidth == 0 {
-			if opt.outputHeight > 0 {
-				return 0
-			}
-			return srcMeta.Size.Width
 		}
 		return opt.outputWidth
 	}()
 	opt.outputHeight = func() int {
 		if opt.pctResize > 0 {
-			log.Infof("Resizing height to %f percent", opt.pctResize)
 			return Scale(opt.pctResize, srcMeta.Size.Height)
-		}
-		if opt.outputHeight == 0 {
-			if opt.outputWidth > 0 {
-				return 0
-			}
-			return srcMeta.Size.Height
 		}
 		return opt.outputHeight
 	}()

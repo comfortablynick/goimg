@@ -1,6 +1,6 @@
 #!/usr/bin/env just --justfile
 bin_name := 'goimg'
-dev := '1'
+dev := '0'
 
 alias e := edit
 alias r := run
@@ -18,7 +18,7 @@ build:
 # build release binary ONLY during dev; otherwise install
 install:
     #!/usr/bin/env bash
-    if [[ {{dev}} -eq "1" ]]; then
+    if [[ {{dev}} -eq 1 ]]; then
         go build && go run . -test -n -v 2
     else
         go install .
