@@ -285,11 +285,35 @@ func main() {
 		return opt.outputHeight
 	}()
 
+	// var textBuf []byte
+	// text := bimg.NewImage(textBuf)
+	// text.Watermark(bimg.Watermark{
+	//         Text:        "© 2019 Nick Murphy | murphpix.com",
+	//         Opacity:     0.75,
+	//         Width:       0,
+	//         NoReplicate: true,
+	//         DPI:         300,
+	//         Margin:      25,
+	//         Font:        "sans 16",
+	//         Background:  bimg.Color{R: 255, G: 255, B: 255},
+	// })
+
 	// Set image processing options
 	imgOpt.Interlace = true
 	imgOpt.Quality = opt.jpegQuality
 	imgOpt.Width = opt.outputWidth
 	imgOpt.Height = opt.outputHeight
+	imgOpt.Watermark = bimg.Watermark{
+		Text:        "© 2019 Nick Murphy | murphpix.com",
+		Opacity:     0.75,
+		Width:       0,
+		NoReplicate: true,
+		DPI:         300,
+		Margin:      25,
+		Font:        "sans 16",
+		Background:  bimg.Color{R: 255, G: 255, B: 255},
+	}
+	// imgOpt.WatermarkImage = text
 
 	// Process image
 	out, err := src.Process(imgOpt)
